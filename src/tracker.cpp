@@ -120,7 +120,7 @@ void VRPN_CALLBACK Tracker::HandlePose(void * data, const vrpn_TRACKERCB tracker
 
   // populate message
   PoseStamped msg;
-  msg.header.frame_id = tracker->frame_id_;
+  msg.header.frame_id = tracker->name_;
   msg.header.stamp = tracker->GetTimestamp(tracker_pose.msg_time);
 
   msg.pose.position.x = tracker_pose.pos[0];
