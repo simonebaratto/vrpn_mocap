@@ -35,8 +35,8 @@ const std::unordered_set<std::string> tracker_name_blacklist_({"VRPN Control"});
 
 Client::Client(const std::string & name)
 : Node(name),
-  frame_id_(declare_parameter("frame_id", "world")),
-  connection_(vrpn_get_connection_by_name(ParseHost().c_str()))
+  connection_(vrpn_get_connection_by_name(ParseHost().c_str())),
+  frame_id_(declare_parameter("frame_id", "world"))
 {
   this->declare_parameter("multi_sensor", false);
   const double refresh_freq = this->declare_parameter("refresh_freq", 1.);

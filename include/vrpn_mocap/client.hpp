@@ -50,13 +50,13 @@ private:
 
   void MainLoop();
 
+  std::shared_ptr<vrpn_Connection> connection_;
   std::unordered_map<std::string, Tracker::SharedPtr> trackers_;
 
   rclcpp::TimerBase::SharedPtr refresh_timer_;
   rclcpp::TimerBase::SharedPtr mainloop_timer_;
 
   const std::string frame_id_;
-  const std::shared_ptr<vrpn_Connection> connection_;
 };
 
 }  // namespace vrpn_mocap
