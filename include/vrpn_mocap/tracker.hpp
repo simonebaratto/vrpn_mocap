@@ -27,6 +27,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <mutex>
 
 #include "vrpn_Connection.h"
 #include "vrpn_Tracker.h"
@@ -68,11 +69,15 @@ protected:
    * @param base_node VRPNClient node
    * @param name tracker name
    * @param connection vrpn connection pointer (looked up from tracker name if nullptr)
+   * @param aggregate_topics whether to aggregate all sensors of the same type into one topic (e.g. "tracker1/pose" instead of "tracker1/pose0", "tracker1/pose1", etc.)
    * @see vrpn_mocap::Client
    */
   Tracker(
-    const rclcpp::Node & base_node, const std::string & tracker_name,
-    const std::shared_ptr<vrpn_Connection> & connection = nullptr);
+    const rclcpp::Node & base_node, 
+    const std::string & tracker_name,
+    const std::shared_ptr<vrpn_Connection> & connection = nullptr,
+    const bool aggregate_topics = true
+  );
 
 private:
   template<typename MsgT>
@@ -97,12 +102,18 @@ public:
 
   std::string ValidNodeName(const std::string & name);
 
+  // init variables
   const std::string name_;
   const bool multi_sensor_;
   const std::string frame_id_;
   const bool sensor_data_qos_;
   const bool use_vrpn_timestamps_;
   const std::shared_ptr<vrpn_Connection> connection_;
+  const bool aggregate_topics_;
+
+  // message buffer
+  mutable std::mutex buffer_mutex_;
+  geometry_msgs::msg::PoseStamped::SharedPtr pose_buffer_;
 
   vrpn_Tracker_Remote vrpn_tracker_;
 
@@ -114,7 +125,8 @@ public:
 
   template<typename MsgT>
   typename PublisherT<MsgT>::SharedPtr GetOrCreatePublisher(
-    const size_t & sensor_idx, const std::string & channel,
+    const size_t & sensor_idx, 
+    const std::string & channel,
     std::vector<typename PublisherT<MsgT>::SharedPtr> * pubs)
   {
     // expand publisher array size if needed
@@ -123,17 +135,13 @@ public:
     }
 
     // create publisher if needed
-    const std::string sensor_channel =
-      multi_sensor_ ? channel + std::to_string(sensor_idx) : channel;
+    const std::string sensor_channel = multi_sensor_ ? channel + std::to_string(sensor_idx) : channel;
+
     if (!pubs->at(sensor_idx)) {
       if (sensor_data_qos_) {
-        pubs->at(sensor_idx) = this->create_publisher<MsgT>(
-          sensor_channel,
-          rclcpp::SensorDataQoS());
+        pubs->at(sensor_idx) = this->create_publisher<MsgT>(sensor_channel, rclcpp::SensorDataQoS());
       } else {
-        pubs->at(sensor_idx) = this->create_publisher<MsgT>(
-          sensor_channel,
-          rclcpp::SystemDefaultsQoS());
+        pubs->at(sensor_idx) = this->create_publisher<MsgT>(sensor_channel, rclcpp::SystemDefaultsQoS());
       }
       RCLCPP_INFO_STREAM(this->get_logger(), "Creating sensor " << sensor_idx);
     }
@@ -142,6 +150,7 @@ public:
   }
 
   builtin_interfaces::msg::Time GetTimestamp(struct timeval vrpn_timestamp);
+  geometry_msgs::msg::PoseStamped::SharedPtr GetPoseStamped() const;
 
   static void VRPN_CALLBACK HandlePose(void * tracker, const vrpn_TRACKERCB tracker_pose);
   static void VRPN_CALLBACK HandleTwist(void * tracker, const vrpn_TRACKERVELCB tracker_vel);

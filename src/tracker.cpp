@@ -65,15 +65,23 @@ Tracker::Tracker(const std::string & tracker_name)
 
 Tracker::Tracker(
   const rclcpp::Node & base_node, const std::string & tracker_name,
-  const std::shared_ptr<vrpn_Connection> & connection)
+  const std::shared_ptr<vrpn_Connection> & connection, const bool aggregate_topics)
 : Node(base_node, ValidNodeName(tracker_name)),
   name_(tracker_name),
   multi_sensor_(base_node.get_parameter("multi_sensor").as_bool()),
   frame_id_(base_node.get_parameter("frame_id").as_string()),
   sensor_data_qos_(base_node.get_parameter("sensor_data_qos").as_bool()),
   use_vrpn_timestamps_(base_node.get_parameter("use_vrpn_timestamps").as_bool()),
+  buffer_mutex_(),
+  pose_buffer_(std::make_shared<geometry_msgs::msg::PoseStamped>()),
+  aggregate_topics_(aggregate_topics),
   vrpn_tracker_(name_.c_str(), connection.get())
 {
+  // initialize message buffer
+  pose_buffer_->header.frame_id = frame_id_;
+  pose_buffer_->header.stamp = rclcpp::Time(0, 0, RCL_ROS_TIME);
+
+  // initialize handlers
   Init();
 }
 
@@ -110,29 +118,42 @@ builtin_interfaces::msg::Time Tracker::GetTimestamp(struct timeval vrpn_timestam
   return this->get_clock()->now();
 }
 
+geometry_msgs::msg::PoseStamped::SharedPtr Tracker::GetPoseStamped() const {
+    std::lock_guard<std::mutex> lock(this->buffer_mutex_);
+    return this->pose_buffer_;
+}
+
 void VRPN_CALLBACK Tracker::HandlePose(void * data, const vrpn_TRACKERCB tracker_pose)
 {
   Tracker * tracker = static_cast<Tracker *>(data);
 
+  // populate message buffer
+  geometry_msgs::msg::PoseStamped::SharedPtr msg = std::make_shared<geometry_msgs::msg::PoseStamped>();
+  msg->header.frame_id = tracker->name_;
+  msg->header.stamp = tracker->GetTimestamp(tracker_pose.msg_time);
+
+  msg->pose.position.x = tracker_pose.pos[0];
+  msg->pose.position.y = tracker_pose.pos[1];
+  msg->pose.position.z = tracker_pose.pos[2];
+
+  msg->pose.orientation.x = tracker_pose.quat[0];
+  msg->pose.orientation.y = tracker_pose.quat[1];
+  msg->pose.orientation.z = tracker_pose.quat[2];
+  msg->pose.orientation.w = tracker_pose.quat[3];
+
+  // update message buffer
+  {
+    std::lock_guard<std::mutex> lock(tracker->buffer_mutex_);
+    tracker->pose_buffer_ = msg;
+  }
+
+  if (!tracker->aggregate_topics_) {
   // lazy initialization of publisher
-  auto pub = tracker->GetOrCreatePublisher<PoseStamped>(
+    auto pub = tracker->GetOrCreatePublisher<geometry_msgs::msg::PoseStamped>(
     static_cast<size_t>(tracker_pose.sensor), "pose", &tracker->pose_pubs_);
 
-  // populate message
-  PoseStamped msg;
-  msg.header.frame_id = tracker->name_;
-  msg.header.stamp = tracker->GetTimestamp(tracker_pose.msg_time);
-
-  msg.pose.position.x = tracker_pose.pos[0];
-  msg.pose.position.y = tracker_pose.pos[1];
-  msg.pose.position.z = tracker_pose.pos[2];
-
-  msg.pose.orientation.x = tracker_pose.quat[0];
-  msg.pose.orientation.y = tracker_pose.quat[1];
-  msg.pose.orientation.z = tracker_pose.quat[2];
-  msg.pose.orientation.w = tracker_pose.quat[3];
-
   pub->publish(msg);
+}
 }
 
 void VRPN_CALLBACK Tracker::HandleTwist(void * data, const vrpn_TRACKERVELCB tracker_twist)

@@ -29,6 +29,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "vrpn_mocap/tracker.hpp"
+#include "nav_msgs/msg/path.hpp"
 
 namespace vrpn_mocap
 {
@@ -52,11 +53,12 @@ private:
 
   std::shared_ptr<vrpn_Connection> connection_;
   std::unordered_map<std::string, Tracker::SharedPtr> trackers_;
+  const bool aggregate_topics_;
+  const std::string frame_id_;
 
   rclcpp::TimerBase::SharedPtr refresh_timer_;
   rclcpp::TimerBase::SharedPtr mainloop_timer_;
-
-  const std::string frame_id_;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr all_poses_pub_;
 };
 
 }  // namespace vrpn_mocap

@@ -36,18 +36,23 @@ const std::unordered_set<std::string> tracker_name_blacklist_({"VRPN Control"});
 Client::Client(const std::string & name)
 : Node(name),
   connection_(vrpn_get_connection_by_name(ParseHost().c_str())),
+  aggregate_topics_(declare_parameter("aggregate_topics", true)),
   frame_id_(declare_parameter("frame_id", "world"))
 {
   this->declare_parameter("multi_sensor", false);
+  this->declare_parameter("sensor_data_qos", true);
+  this->declare_parameter("use_vrpn_timestamps", false);
+
   const double refresh_freq = this->declare_parameter("refresh_freq", 1.);
-  refresh_timer_ =
-    this->create_wall_timer(1s / refresh_freq, std::bind(&Client::RefreshConnection, this));
+  refresh_timer_ = this->create_wall_timer(1s / refresh_freq, std::bind(&Client::RefreshConnection, this));
 
   const double update_freq = this->declare_parameter("update_freq", 100.);
   mainloop_timer_ = this->create_wall_timer(1s / update_freq, std::bind(&Client::MainLoop, this));
 
-  this->declare_parameter("sensor_data_qos", true);
-  this->declare_parameter("use_vrpn_timestamps", false);
+  // aggregate topics logic
+  if (aggregate_topics_) {
+    cars_poses_pub_ = this->create_publisher<nav_msgs::msg::Path>("/cars_poses", rclcpp::SensorDataQoS());
+  }
 }
 
 std::string Client::ParseHost()
@@ -66,21 +71,36 @@ void Client::RefreshConnection()
   for (int i = 0; connection_->sender_name(i); i++) {
     const std::string tracker_name = connection_->sender_name(i);
     if (trackers_.count(tracker_name) == 0 && tracker_name_blacklist_.count(tracker_name) == 0) {
-      trackers_[tracker_name] = Tracker::private_make_shared(*this, tracker_name, connection_);
+      trackers_[tracker_name] = Tracker::private_make_shared(*this, tracker_name, connection_, aggregate_topics_);
     }
   }
 }
 
 void Client::MainLoop()
 {
+  // check connection
   connection_->mainloop();
-
   if (!connection_->doing_okay()) {
     RCLCPP_WARN(this->get_logger(), "VRPN connection is bad");
   }
 
+  // aggregate topics logic
+  nav_msgs::msg::Path::SharedPtr cars_poses_msg = std::make_shared<nav_msgs::msg::Path>();
   for (const auto & tracker : trackers_) {
     tracker.second->MainLoop();
+    if (aggregate_topics_) {
+      geometry_msgs::msg::PoseStamped::SharedPtr pose_ptr = tracker.second->GetPoseStamped()
+      if (pose_ptr) {
+        cars_poses_msg->poses.push_back(*pose_ptr)
+      }
+    }
+  }
+
+  // publish aggregated topic
+  if (aggregate_topics_) {
+    cars_poses_msg->header.stamp = this->now();
+    cars_poses_msg->header.frame_id = frame_id_;
+    cars_poses_pub_->publish(cars_poses_msg);
   }
 }
 
