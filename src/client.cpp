@@ -89,9 +89,9 @@ void Client::MainLoop()
   for (const auto & tracker : trackers_) {
     tracker.second->MainLoop();
     if (aggregate_topics_) {
-      geometry_msgs::msg::PoseStamped::SharedPtr pose_ptr = tracker.second->GetPoseStamped()
+      geometry_msgs::msg::PoseStamped::SharedPtr pose_ptr = tracker.second->GetPoseStamped();
       if (pose_ptr) {
-        cars_poses_msg->poses.push_back(*pose_ptr)
+        cars_poses_msg->poses.push_back(*pose_ptr);
       }
     }
   }
@@ -100,7 +100,7 @@ void Client::MainLoop()
   if (aggregate_topics_) {
     cars_poses_msg->header.stamp = this->now();
     cars_poses_msg->header.frame_id = frame_id_;
-    cars_poses_pub_->publish(cars_poses_msg);
+    cars_poses_pub_->publish(*cars_poses_msg);
   }
 }
 

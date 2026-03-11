@@ -58,7 +58,7 @@ private:
 
   rclcpp::TimerBase::SharedPtr refresh_timer_;
   rclcpp::TimerBase::SharedPtr mainloop_timer_;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr all_poses_pub_;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr cars_poses_pub_;
 };
 
 }  // namespace vrpn_mocap

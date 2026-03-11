@@ -54,8 +54,9 @@ public:
    * @brief constructor
    *
    * @param tracker_name name of the object to track
+   * @param aggregate_topics whether to aggregate all sensors of the same type into one topic (e.g. "tracker1/pose" instead of "tracker1/pose0", "tracker1/pose1", etc.)
    */
-  explicit Tracker(const std::string & tracker_name);
+  explicit Tracker(const std::string & tracker_name, const bool aggregate_topics);
 
   /**
    * @brief destructor

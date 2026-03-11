@@ -47,13 +47,14 @@ std::string Tracker::ValidNodeName(const std::string & tracker_name)
   return node_name;
 }
 
-Tracker::Tracker(const std::string & tracker_name)
+Tracker::Tracker(const std::string & tracker_name, const bool aggregate_topics)
 : Node(ValidNodeName(tracker_name)),
   name_(tracker_name),
   multi_sensor_(declare_parameter("multi_sensor", false)),
   frame_id_(declare_parameter("frame_id", "world")),
   sensor_data_qos_(declare_parameter("sensor_data_qos", true)),
   use_vrpn_timestamps_(declare_parameter("use_vrpn_timestamps", false)),
+  aggregate_topics_(aggregate_topics),
   vrpn_tracker_(name_.c_str())
 {
   Init();
@@ -128,7 +129,7 @@ void VRPN_CALLBACK Tracker::HandlePose(void * data, const vrpn_TRACKERCB tracker
   Tracker * tracker = static_cast<Tracker *>(data);
 
   // populate message buffer
-  geometry_msgs::msg::PoseStamped::SharedPtr msg = std::make_shared<geometry_msgs::msg::PoseStamped>();
+  auto msg = std::make_shared<geometry_msgs::msg::PoseStamped>();
   msg->header.frame_id = tracker->name_;
   msg->header.stamp = tracker->GetTimestamp(tracker_pose.msg_time);
 
@@ -147,13 +148,14 @@ void VRPN_CALLBACK Tracker::HandlePose(void * data, const vrpn_TRACKERCB tracker
     tracker->pose_buffer_ = msg;
   }
 
-  if (!tracker->aggregate_topics_) {
-  // lazy initialization of publisher
-    auto pub = tracker->GetOrCreatePublisher<geometry_msgs::msg::PoseStamped>(
-    static_cast<size_t>(tracker_pose.sensor), "pose", &tracker->pose_pubs_);
+  if (!tracker->aggregate_topics_)
+  {
+    // lazy initialization of publisher
+      auto pub = tracker->GetOrCreatePublisher<geometry_msgs::msg::PoseStamped>(
+      static_cast<size_t>(tracker_pose.sensor), "pose", &tracker->pose_pubs_);
 
-  pub->publish(msg);
-}
+    pub->publish(*msg);
+  }
 }
 
 void VRPN_CALLBACK Tracker::HandleTwist(void * data, const vrpn_TRACKERVELCB tracker_twist)
